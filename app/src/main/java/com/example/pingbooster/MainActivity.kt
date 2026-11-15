@@ -1,6 +1,3 @@
-**کد کامل MainActivity.kt نسخه 3.0**
-
-```kotlin
 package com.example.pingbooster
 
 import android.app.Activity
@@ -351,4 +348,258 @@ class MainActivity : Activity() {
                     ----------------------------
 
                     This is a TCP test to Cloudflare.
-                    It is not
+                    It is not your actual game ping.
+                    No network route has been changed.
+                """.trimIndent()
+
+                saveHistory(average, jitter, networkType)
+            }
+
+            runOnUiThread {
+
+                output.text = report
+
+                updateQuality(
+                    average,
+                    jitter,
+                    samples.isNotEmpty()
+                )
+
+                showNetworkStatus()
+                loadHistory()
+
+                runButton.isEnabled = true
+            }
+        }
+    }
+
+    private fun updateQuality(
+        average: Double,
+        jitter: Double,
+        success: Boolean
+    ) {
+
+        if (!success) {
+            qualityText.text = "NETWORK QUALITY: POOR"
+            qualityText.setTextColor(Color.RED)
+            return
+        }
+
+        val quality = when {
+            average < 100 && jitter < 20 -> "GOOD"
+            average < 180 && jitter < 40 -> "MODERATE"
+            else -> "POOR"
+        }
+
+        val color = when (quality) {
+            "GOOD" -> Color.rgb(30, 160, 70)
+            "MODERATE" -> Color.rgb(220, 150, 0)
+            else -> Color.RED
+        }
+
+        qualityText.text = "NETWORK QUALITY: $quality"
+        qualityText.setTextColor(color)
+    }
+
+    private fun format(value: Double): String {
+        return String.format(Locale.US, "%.1f", value)
+    }
+
+    private fun saveHistory(
+        average: Double,
+        jitter: Double,
+        networkType: String
+    ) {
+
+        val history = JSONArray(
+            preferences.getString("tests", "[]")
+        )
+
+        val item = JSONObject().apply {
+            put("latency", average)
+            put("jitter", jitter)
+            put("network", networkType)
+            put("time", System.currentTimeMillis())
+        }
+
+        val updated = JSONArray()
+        updated.put(item)
+
+        for (i in 0 until minOf(history.length(), 9)) {
+            updated.put(history.getJSONObject(i))
+        }
+
+        preferences.edit()
+            .putString("tests", updated.toString())
+            .apply()
+    }
+
+    private fun loadHistory() {
+
+        val history = JSONArray(
+            preferences.getString("tests", "[]")
+        )
+
+        if (history.length() == 0) {
+            historyText.text = "No saved tests yet."
+            return
+        }
+
+        val dateFormat = SimpleDateFormat(
+            "MM-dd HH:mm",
+            Locale.getDefault()
+        )
+
+        val result = StringBuilder()
+
+        for (i in 0 until history.length()) {
+
+            val item = history.getJSONObject(i)
+
+            val date = dateFormat.format(
+                Date(item.getLong("time"))
+            )
+
+            result.append(
+                "${i + 1}. $date\n"
+            )
+
+            result.append(
+                "Latency: ${format(item.getDouble("latency"))} ms\n"
+            )
+
+            result.append(
+                "Jitter: ${format(item.getDouble("jitter"))} ms\n"
+            )
+
+            result.append(
+                "Network: ${item.getString("network")}\n\n"
+            )
+        }
+
+        historyText.text = result.toString()
+    }
+
+    private fun clearHistory() {
+        preferences.edit()
+            .remove("tests")
+            .apply()
+
+        loadHistory()
+    }
+
+    override fun onDestroy() {
+        executor.shutdownNow()
+
+        window.clearFlags(
+            android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        )
+
+        super.onDestroy()
+    }
+}
+
+class LatencyChart(context: Context) : View(context) {
+
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private var values = emptyList<Long>()
+
+    init {
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            220
+        )
+    }
+
+    fun updateSamples(samples: List<Long>) {
+        values = samples
+        invalidate()
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+
+        val width = width.toFloat()
+        val height = height.toFloat()
+
+        paint.color = Color.LTGRAY
+        paint.strokeWidth = 2f
+
+        canvas.drawLine(
+            0f,
+            height - 15f,
+            width,
+            height - 15f,
+            paint
+        )
+
+        if (values.isEmpty()) {
+            paint.color = Color.GRAY
+            paint.textSize = 30f
+
+            canvas.drawText(
+                "Waiting for test...",
+                15f,
+                height / 2f,
+                paint
+            )
+
+            return
+        }
+
+        val maxValue = (values.maxOrNull() ?: 1L)
+            .coerceAtLeast(1L)
+
+        val minValue = (values.minOrNull() ?: 0L)
+
+        val step = width / (values.size + 1)
+
+        val points = values.mapIndexed { index, value ->
+
+            val x = step * (index + 1)
+
+            val y = height - 25f -
+                (value.toFloat() / maxValue.toFloat()) *
+                (height - 60f)
+
+            x to y
+        }
+
+        paint.color = Color.rgb(30, 130, 220)
+        paint.strokeWidth = 5f
+        paint.strokeCap = Paint.Cap.ROUND
+
+        for (i in 0 until points.size - 1) {
+
+            canvas.drawLine(
+                points[i].first,
+                points[i].second,
+                points[i + 1].first,
+                points[i + 1].second,
+                paint
+            )
+        }
+
+        paint.color = Color.rgb(20, 100, 200)
+
+        for (point in points) {
+            canvas.drawCircle(
+                point.first,
+                point.second,
+                8f,
+                paint
+            )
+        }
+
+        paint.color = Color.DKGRAY
+        paint.textSize = 25f
+
+        canvas.drawText(
+            "TCP Latency: ${minValue} - ${maxValue} ms",
+            10f,
+            28f,
+            paint
+        )
+    }
+}
+```
