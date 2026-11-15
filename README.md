@@ -15,3 +15,4 @@ This app is a diagnostic tool, not a VPN or traffic-routing service. Android app
 reliably lower a game's ping just by running a script. The TCP measurements here are not
 the same as the game's UDP ping and may differ from the game server's route. No credentials
 or personal data are collected or transmitted by this sample.
+3
