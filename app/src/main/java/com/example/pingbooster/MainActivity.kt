@@ -602,4 +602,3 @@ class LatencyChart(context: Context) : View(context) {
         )
     }
 }
-```
